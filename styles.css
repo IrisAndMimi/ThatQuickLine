@@ -1,0 +1,264 @@
+/* ================================================================================================ */
+/* 全局樣式 */
+body {
+    font-family: 'Comic Sans MS', cursive, sans-serif;
+    background-color: #fef7e0;
+    margin: 20px;
+}
+
+/* 主容器樣式 */
+.chat-container {
+    width: 100%;
+    max-width: 800px;
+    margin: 0 auto;
+    background: #fff;
+    border: 4px solid black;
+    border-radius: 15px;
+    box-shadow: 5px 5px 0px rgba(0, 0, 0, 0.3);
+    overflow: hidden;
+}
+
+/* 頂部標題樣式 */
+.chat-header {
+    background-color: #ffeb3b;
+    color: black;
+    padding: 15px;
+    font-size: 22px;
+    font-weight: bold;
+    text-align: center;
+    border-bottom: 4px solid black;
+}
+
+/* 下拉選單樣式 */
+#chat-header-select {
+    background-color: #ffeb3b;
+    border: 4px dashed black; /* 粗且稀疏的虛線框 */
+    border-radius: 10px;
+    font-size: 22px;
+    font-weight: bold;
+    padding: 15px;
+    cursor: pointer;
+    font-family: 'Comic Sans MS', cursive, sans-serif;
+    text-align: center;
+    display: inline-block;
+    appearance: none; /* 隱藏原生小箭頭 */
+    -webkit-appearance: none; /* 隱藏原生小箭頭 (Webkit 瀏覽器) */
+    position: relative;
+}
+
+#chat-header-select:hover {
+    background-color: #f9e700;
+}
+
+#chat-header-select:focus {
+    outline: none;
+    border-color: #f9a825;
+}
+
+/* 內容區域樣式 */
+.chat-content {
+    padding: 15px;
+    max-height: 300px;
+    overflow-y: auto;
+    background: #fdfdfd;
+}
+
+/* 對話氣泡樣式 */
+.chat-bubble {
+    margin-bottom: 15px;
+    display: flex;
+}
+
+    .chat-bubble.user {
+        justify-content: flex-end;
+    }
+
+    .chat-bubble.assistant {
+        justify-content: flex-start;
+    }
+
+/* 氣泡外觀 */
+.bubble {
+    max-width: 70%;
+    padding: 10px;
+    border-radius: 10px;
+    font-size: 16px;
+    line-height: 1.6;
+    border: 2px solid black;
+    background: #ffffff;
+    box-shadow: 3px 3px 0px rgba(0, 0, 0, 0.3);
+}
+
+    .bubble.user {
+        background-color: #c4f0c5;
+        color: black;
+    }
+
+    .bubble.assistant {
+        background-color: #f0e5c9;
+        color: black;
+    }
+
+/* 代碼塊樣式 */
+.code-block {
+    background-color: #ffffcc;
+    border: 2px dashed black;
+    padding: 10px;
+    border-radius: 5px;
+    font-family: monospace;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    margin-top: 10px;
+    box-shadow: 3px 3px 0px rgba(0, 0, 0, 0.3);
+}
+
+.copy-button {
+    margin-top: 10px;
+    padding: 5px 10px;
+    background-color: #ff5722;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 14px;
+    box-shadow: 2px 2px 0px rgba(0, 0, 0, 0.2);
+}
+
+    .copy-button:hover {
+        background-color: #e64a19;
+    }
+
+/* 底部輸入框區域 */
+.chat-footer {
+    padding: 15px;
+    border-top: 4px solid black;
+    background: #ffeb3b;
+    display: flex;
+    gap: 10px;
+}
+
+    .chat-footer input {
+        flex: 1;
+        padding: 10px;
+        border: 2px solid black;
+        border-radius: 5px;
+        font-size: 16px;
+    }
+
+    .chat-footer button {
+        padding: 10px 20px;
+        border: 2px solid black;
+        background-color: #fbc02d;
+        color: black;
+        border-radius: 5px;
+        cursor: pointer;
+        font-size: 16px;
+    }
+
+        .chat-footer button:hover {
+            background-color: #f9a825;
+        }
+
+/* 功能按鈕區域 */
+.action-buttons {
+    margin: 15px;
+    gap: 10px;
+    display: flex; /* 啟用 Flex 布局 */
+    flex-wrap: wrap; /* 允許按鈕換行 */
+    justify-content: center; /* 水平居中對齊 */
+}
+
+    .action-buttons button {
+        padding: 10px 20px;
+        font-size: 16px;
+        border: 2px solid black;
+        background-color: #81d4fa;
+        color: black;
+        border-radius: 5px;
+        cursor: pointer;
+        box-shadow: 2px 2px 0px rgba(0, 0, 0, 0.2);
+    }
+
+        .action-buttons button:hover {
+            background-color: #4fc3f7;
+        }
+		
+/* 功能按鈕區域-日期相關 */
+
+.checkbox-group, .radio-group {
+    display: block; /* 確保整組獨占一行 */
+    align-items: center; /* 垂直居中對齊 */
+    font-family: 'Comic Sans MS', cursive, sans-serif; /* 繼承漫畫風字體 */
+    font-size: 18px; /* 與其他按鈕文字一致 */
+    gap: 10px; /* 控制項目間距 */
+    line-height: 1.5; /* 提升可讀性 */
+}
+
+.checkbox-group input[type="checkbox"], .radio-group input[type="radio"] {
+    width: 20px; /* 控制按鈕大小 */
+    height: 20px; /* 控制按鈕大小 */
+    margin-right: 10px; /* 與文字間距 */
+}
+
+/* 單選選項的樣式 */
+.radio-option {
+    display: flex; /* 將文字與按鈕水平排列 */
+    align-items: center; /* 垂直居中對齊 */
+    gap: 5px; /* 單選框與文字的間距 */
+}
+
+/* ================================================================================================ */
+
+
+/* 手機端適配 */
+@media (max-width: 600px) {
+    .chat-content {
+        padding: 10px;
+    }
+
+    .bubble {
+        font-size: 12px;
+        padding: 8px;
+    }
+
+    .chat-footer input {
+        font-size: 12px;
+        padding: 8px;
+    }
+
+    .chat-footer button {
+        font-size: 12px;
+        padding: 8px 15px;
+    }
+
+    .action-buttons button {
+        font-size: 12px;
+        padding: 8px 15px;
+    }
+
+    #chat-header-select {
+        font-size: 20px;
+        padding: 10px;
+    }
+	
+	/* 功能按鈕區域-日期相關 */
+    .checkbox-group, .radio-group {
+        font-size: 16px; /* 縮小文字大小 */
+        gap: 8px; /* 減小項目間距 */
+        display: block; /* 垂直排列 */
+    }
+
+    .checkbox-group input[type="checkbox"], .radio-group input[type="radio"] {
+        width: 16px; /* 調整按鈕大小 */
+        height: 16px; /* 調整按鈕大小 */
+        margin-right: 8px; /* 減少間距 */
+    }
+
+    .radio-option {
+        margin-bottom: 10px; /* 單選框之間的間距 */
+    }
+
+}
+
+
+/* ================================================================================================ */
