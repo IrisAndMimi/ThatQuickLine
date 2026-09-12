@@ -1,0 +1,853 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  functionMap.xml - 那個 QuickLine 功能結構紀錄
+  ================================================================================
+  這份檔案的「形狀」＝專案的實際結構：
+      檔案 <file> 裡面包著功能 <function>，功能裡面包著它用到的東西 <uses>。
+  所以看這份檔案 = 看懂哪個功能住在哪、靠什麼活著、刪掉會影響誰。
+
+  ★ 它會被自動檢查 ★
+  core.js 的 checkFunctionMap() 在頁面載入時，比對本檔所有 <function key="...">
+  與程式中實際 registerFeature() 登記的功能（後代搜尋，不管巢狀多深）：
+    - 兩邊一致          → console: "✓ 與 functionMap.xml 一致"
+    - xml 有、程式沒有  → 告警（刪了功能但忘記更新本檔）
+    - 程式有、xml 沒有  → 告警（新增功能但忘記記錄）
+  以 file:// 直接雙擊開啟時瀏覽器會擋下讀取，此時只印出實際清單供人工核對。
+
+  ★ 新增功能 ★
+    1. features.js 複製一個 #region 區塊改寫，結尾 registerFeature({ key:'...' })
+    2. 本檔對應的 <file> 底下加一組 <function key="...">（key 必須完全相同）
+    core.js 與 index.html 都不需要修改。
+  ================================================================================
+-->
+<functionMap app="那個 QuickLine" updated="2026-08-17">
+
+<file path="index.html" role="入口">
+  <desc>
+    只有版面骨架。下拉選單的選項由 core.js 依已登記的功能自動產生，此處不需維護。
+    .chat-content 開場是空的，功能一覽由 core.js 在 DOMContentLoaded 時 echo 進去
+    （只在真正載入時做，bfcache 還原不會重複列出）。
+
+    分工原則：
+      對話框（上）＝ 功能一覽，常看的東西，動態生成
+      說明書區塊（下）＝ 操作說明，給不熟的人查的，靜態文字
+  </desc>
+  <anchor id="chat-header-select">功能下拉選單（第一項顯示 APP_SHORT_NAME）</anchor>
+  <anchor id="chat-input">輸入框，textarea：Enter 送出、Shift+Enter 換行、高度隨行數自動長高</anchor>
+  <anchor id="live-preview">即時預覽列，顯示「這次輸入送出後會怎樣」（動態，會解讀輸入）</anchor>
+  <anchor id="cmd-hint">提示列，常駐：只顯示「你在哪、該打什麼形狀的東西」（不解讀輸入內容）</anchor>
+  <anchor id="action-buttons">功能按鈕區</anchor>
+  <anchor id="help-block">說明書區塊</anchor>
+</file>
+
+<file path="custom_js/core.js" role="核心層">
+  <desc>
+    對話框機制。不認識任何功能，功能一律透過 registerFeature() 自行登記。
+
+    另含「指令層」，讓聊天框可全鍵盤操作：
+      主選單 → 輸入被當成指令（編號、代號 cmd、功能全名，或三者的唯一前綴）
+               ★ 後面還有東西的話（如「1 1 t」），第一個 token 選功能後，
+                 剩下的字串原封不動交給「功能內」那段邏輯處理（選項＋參數的
+                 判斷完全共用同一份程式碼），略過「已進入」的敘述畫面，
+                 有結果就直接執行。沒有剩下的字串則行為不變，正常進入該功能。
+      功能內 → 輸入被當成該功能的參數
+               ★ 多行輸入一律視為純參數，不解析選項
+                 （選項是單一 token 的概念、不可能跨行；有換行就代表使用者在給資料）
+               「n」或「代號」      → 切換選項（代號來自 radio 的 data-cmd，可打唯一前綴）
+               「n 參數」「代號 參數」→ 切換選項後直接執行，一次到位
+                                     （單獨形式只是參數為空的特例，兩者不衝突）
+               第一段解析不出選項時，整串當一般參數處理
+      空白 Enter → 不做事
+      返回       → 單鍵 x（送出）或 Esc，兩者共用 goBack()：
+                   有待補提問 → 取消提問並留在原功能；否則 → 退出回主選單
+                   （Esc 額外多一段：輸入框有字時先清空）
+                   x 放在解析流程最前面，所以待補提問中也能用它取消。
+                   x 不與任何選項代號或功能代號衝突；「x 3」這種帶參數的形式不受影響。
+      Tab 補全代號（多候選則循環）、Esc 清空／回主選單、#cmd-hint 即時提示
+    指令表與選項編號皆由 FEATURES 與畫面上的第一組 radio 自動推導，新增功能不必改核心。
+    指令與點選 UI 雙向同步：打指令會設定下拉選單與單選鈕，點 UI 也照常生效。
+
+    頁面載入時（DOMContentLoaded，bfcache 還原不會重複觸發）：
+      · 游標自動 focus 進輸入框，全鍵盤操作不必先點一下滑鼠。
+      · 讀網址參數 ?q=xxx，有值就等同貼上 xxx 並按下 Enter 直接送出，
+        送完用 history.replaceState 把 ?q= 從網址拿掉（重新整理不會再送一次）。
+        可搭配上面的路徑指令做成捷徑連結，例如 ?q=1 1 t。
+  </desc>
+  <provides name="registerFeature">功能登記入口</provides>
+  <provides name="getCopyableHmtl">產生「可複製區塊」並自動寫入剪貼簿</provides>
+  <provides name="copyToClipboard">純複製</provides>
+  <provides name="copyCodeblock">複製指定區塊的文字</provides>
+  <provides name="debounce">防抖</provides>
+  <provides name="checkFunctionMap">比對本 xml 與實際登記的功能</provides>
+  <provides name="handleCommand">指令層總入口（主選單解析指令／功能內解析選項編號）</provides>
+  <provides name="enterFeature">進入功能並同步 UI</provides>
+  <provides name="state.pending">待補參數：功能回傳 { prompt, resume } 時暫存於此，下一句輸入即為答案</provides>
+  <provides name="getOptionTableHtml">把目前功能的選項排成表格（#／代號／選項，與主選單同一種呈現；
+    2026-08-17 起不再標亮目前選中的那列——下方的 usage／即時預覽本身就看得出現在是哪個選項，
+    表格再標一次只會多一份可能對不齊的資訊）</provides>
+  <provides name="resolveOption">把輸入解析成選項：編號、data-cmd 代號、或代號的唯一前綴</provides>
+  <provides name="getOptionName">從包住 radio 的 label 取顯示名稱</provides>
+  <provides name="onOptionChange">功能可實作的鉤子：只指定選項而未帶參數時呼叫，回傳 HTML 表示該選項本身就是一個動作</provides>
+  <provides name="exitToMainMenu">退出回主選單（空白 Enter）</provides>
+  <provides name="getMenuHtml">由 FEATURES 生成主選單指令表</provides>
+  <provides name="completeCommand">Tab 補全（多候選則循環）</provides>
+  <provides name="updateCmdHint">提示列 #cmd-hint —— 只講能力，不評斷輸入內容</provides>
+  <provides name="updateLivePreview">即時預覽：呼叫功能的 onPreview() 顯示送出後的結果</provides>
+  <provides name="goBack">返回（x 與 Esc 共用）</provides>
+  <provides name="BACK_COMMAND">返回指令的字母，目前是 x</provides>
+  <provides name="previewRow">預覽的一列；第三參數可加 pending 樣式，用於「還沒打完」</provides>
+  <provides name="escapeHtml">預覽會把使用者輸入放進 innerHTML，需先跳脫</provides>
+  <provides name="autoGrowInput">輸入框高度隨行數自動調整（超過 CSS max-height 後改內部捲動）</provides>
+  <provides name="resolveContent">buttons/help 支援字串或函式</provides>
+  <provides name="updateTitle">依所在位置更新分頁標題（主選單→APP_NAME；功能內→功能 · APP_NAME）</provides>
+  <provides name="APP_NAME">全名，用於分頁標題等「還不知道這是什麼」的場合</provides>
+  <provides name="APP_SHORT_NAME">簡寫，用於下拉選單等「已經身在其中」的場合</provides>
+</file>
+
+<file path="data/return_msg_storage.js" role="資料層">
+  <desc>共用字串模板。只放多個功能共用、或常需要調整措辭的東西。</desc>
+  <provides name="rType.linkPrice">[${title}](${url})，售價$${price}</provides>
+  <provides name="rType.lineJoinLink">[${title}](${url})</provides>
+  <provides name="rType.copyCodeBlock">可複製區塊的外框 HTML</provides>
+</file>
+
+<file path="styles.css" role="樣式">
+  <desc>
+    :root 定義 --mono 等寬字型，供指令、代號、格式標記、預覽框共用。
+    刻意不沿用全站的 Comic Sans —— 它的小寫 t 是十字形，與「十」容易混淆；
+    Consolas / Menlo 的 t 有明確彎鉤。行內 code 另加 letter-spacing，短代號較好讀。
+  </desc>
+</file>
+
+
+<!-- ================================================================================ -->
+<!-- 功能層：以下每個 <function> 對應 features.js 裡一個 #region 區塊                     -->
+<!-- ================================================================================ -->
+<file path="custom_js/features.js" role="功能層">
+  <desc>所有功能。每個功能是一個獨立可刪的區塊：內部函式 + registerFeature()。</desc>
+
+  <!-- ──────────────────────────────────────────────── -->
+  <!--
+    cmd      指令代號，供指令層生成主選單；沒有 cmd 就只能用編號或功能全名進入
+    usage    參數形狀，只寫簽章（會顯示在常駐的提示列，必須短）
+    examples 例子，只在「進入功能」的氣泡裡顯示，不進提示列
+  -->
+  <function key="複製日期" cmd="date" status="active" block="#region 功能：複製日期" from="custom_js/copy_Date.js">
+    <summary>把簡寫日期轉成指定格式的完整日期，並自動複製</summary>
+
+    <uses file="custom_js/core.js" part="getCopyableHmtl" />
+    <uses file="custom_js/core.js" part="debounce" />
+    <uses file="data/return_msg_storage.js" part="rType.copyCodeBlock" indirect="經由 getCopyableHmtl" />
+
+    <ui>
+      <control type="checkbox" name="today-checkbox">今日（自動填入今天的 mmdd）</control>
+      <control type="radio" name="date-format">/ 格式、() 格式、人照、by媽 格式、自訂格式</control>
+      <control type="textarea" name="date-custom-format">
+        自訂格式字串（多行輸入，換行會原樣保留）。置於「自訂格式」單選鈕的 label 內。
+        focus → 自動選中「自訂格式」。
+        blur 且內容為空白 → 退回 DOM 上的第一個選項
+        （刻意用 querySelector 抓第一個，調整選項順序時會跟著變）。
+        例外：若 event.relatedTarget 是同組(name=date-format)的其他選項，
+        表示使用者正要點那個選項，就不退回，避免「先跳回第一個、再跳到目標」的閃爍。
+        relatedTarget 缺失(舊瀏覽器)時退回原行為，仍安全。
+        空白判定一律用 trim()，toggleCustomFormatRadio 與 updateCustomFormatPreview 必須同標準，
+        否則會互相打架（前者剛退回選項、後者又勾回 custom）。
+      </control>
+      <control type="div" name="date-custom-preview">自訂格式的即時預覽</control>
+    </ui>
+
+    <input>
+      日期：915 / 0915 / 20210915
+      日期.時間：日期後可接「.」加 2、4 或 6 位數時間（HH / HHmm / HHmmss）
+        1231.11 → 11:00:00　1231.1159 → 11:59:00　1231.115959 → 11:59:59
+      時間僅「自訂格式」的時分秒標記會用到；其他四種格式只輸出年月日
+    </input>
+
+    <io>
+      <example input="1231" option="/">/ 2026年12月31日 星期四</example>
+      <example input="1231" option="()">(2026.12.31)</example>
+      <example input="1231" option="(pp)">20261231(人照)</example>
+      <example input="1231" option="(by)m">20261231(by媽手機)</example>
+      <example input="915">同上，視為今年 9 月 15 日</example>
+      <example input="20210915" option="()">(2021.9.15)</example>
+      <example input="20231301">無效日期 → 「無法解析的日期格式」</example>
+      <example input="1231.2565">無效時間 → 「無法解析的日期格式」</example>
+      <example input="1231.1">時間位數不是 2/4/6 → 「無法解析的日期格式」</example>
+      <example input="1231.11.22">超過一個「.」→ 「無法解析的日期格式」</example>
+    </io>
+
+    <subFunction name="自訂格式">
+      <note>
+        標記清單定義在 features.js 的 DATE_TOKENS 常數，
+        說明書的格式對照表由它自動生成 —— 要增減標記只改該陣列，文件會跟著同步。
+      </note>
+      <note>大小寫有別：MM 是月份、mm 是分鐘</note>
+      <note>比對時長標記優先，避免 ddd 被 dd 先吃掉</note>
+      <note>
+        時間來源依序判斷：
+        1. 輸入已指定時間(1231.115959) → 直接採用
+        2. 未指定且是今天 → 帶入現在時刻
+        3. 未指定的其他日期 → 該日 00:00:00
+      </note>
+      <tokens>cyy yyyy yy MM M dd d dddd ddd HH H hh h mm m ss s tt</tokens>
+      <note>cyy 是民國年（西元-1911），JavaScript 原生沒有，屬本工具自訂擴充</note>
+      <note>格式字串可含換行，換行會原樣保留到複製結果</note>
+      <note>
+        說明書的格式標記表，左欄 td.token-cell 可點擊直接複製該標記
+        （onclick="copyToClipboard('標記')"，同樣由 DATE_TOKENS 生成）。
+        只有標記欄可點，說明欄與結果欄不綁事件，避免誤觸。
+      </note>
+      <escape>'單引號內' 原樣輸出；\ 跳脫單一字元；中文不受影響</escape>
+      <io>
+        <example input="所在日期yyyyMMdd，那天是ddd" option="0816">所在日期20260816，那天是週日</example>
+        <example input="yyyy-MM-dd HH:mm:ss" option="1231.115959">2026-12-31 11:59:59</example>
+        <example input="yyyy-MM-dd HH:mm:ss" option="今天 0816">2026-08-16 23:11:39（帶現在時刻）</example>
+        <example input="yyyy-MM-dd HH:mm:ss" option="1231">2026-12-31 00:00:00</example>
+        <example input="yyyy年M月d日" option="1231">2026年12月31日</example>
+        <example input="yyyy'day'" option="1231">2026day</example>
+        <example input="民國cyy年M月d日" option="1231">民國115年12月31日</example>
+        <example input="日期：yyyy/MM/dd(換行)時間：HH:mm:ss" option="1231.115959">兩行輸出，換行保留</example>
+        <example input="（格式留空）">「請先在『自訂格式』欄位輸入格式」</example>
+      </io>
+      <remove>刪 DATE_TOKENS / formatDateByPattern / resolveDateTime / updateCustomFormatPreview、getFormatDateHtmlC 的 custom 分支、buttons 的 custom 單選與預覽、說明書對應段落、本節點。
+        注意 parseDateString 的「.時間」解析是獨立能力，其他格式也吃得到，不必一起刪</remove>
+    </subFunction>
+
+    <remove>刪除 features.js 的「功能：複製日期」整個區塊，並刪除本節點</remove>
+  </function>
+
+  <!-- ──────────────────────────────────────────────── -->
+  <function key="剪貼簿" cmd="clip" status="active" block="#region 功能：剪貼簿" from="custom_js/cmd_clipboard.js">
+    <summary>複製-重複文字（自訂次數）／ 複製-特殊字元（換行、Tab、空白類）</summary>
+    <note>
+      鍵盤入口 getRepeatHtmlC()：格式嚴格，有歧義一律擋下不執行。
+        單行 「&lt;文字&gt; 空白 &lt;純數字&gt;」，最後一段不是數字就是錯誤
+        多行 最後一行是次數，前面所有內容原樣保留（含空白與換行）
+      擋下的情況：沒給次數（如「5」「哈」）、最後一段非數字、次數不在 1~1000。
+      刻意不再沿用畫面欄位的次數 —— 那等於在猜。
+      解析後會寫回 repeat-text / repeat-count，維持與畫面雙向同步。
+    </note>
+
+    <uses file="custom_js/core.js" part="copyToClipboard" />
+
+    <subFunction name="複製-重複文字">
+      <ui>
+        <control type="text" name="repeat-text">要重複的文字</control>
+        <control type="number" name="repeat-count">重複次數，夾在 1~1000</control>
+        <control type="button" onclick="copyRepeatText()">複製-重複文字</control>
+        <control type="div" name="repeat-preview">即時預覽（超過 60 字元截斷，並顯示總字數）</control>
+      </ui>
+      <note>直接黏接，不插入任何分隔符</note>
+      <io>
+        <example input="哈" option="次數 25">哈×25（共 25 字元）</example>
+        <example input="=" option="次數 40">========================================</example>
+        <example input="ab" option="次數 3">ababab</example>
+        <example input="（文字留空）">「請先輸入要重複的文字」</example>
+      </io>
+      <remove>刪 buildRepeatText / getRepeatParams / updateRepeatPreview / copyRepeatText、buttons 的 repeat-group 與 repeat-preview、onRender、本節點</remove>
+    </subFunction>
+
+    <subFunction name="複製-特殊字元">
+      <ui>
+        <control type="radio" name="clip-mode">1 重複文字(rep)、2 換行(nl)、3 Tab(tab)、4 零寬空格(zw)、5 全形空格(fw)</control>
+        <control type="button" onclick="copySpecialChar()">複製-特殊字元</control>
+      </ui>
+      <note>清單定義在 features.js 的 SPECIAL_CHARS 常數，單選鈕由它自動生成；要增減字元只改該陣列</note>
+      <io>
+        <example input="換行" codepoint="U+000A">\n　貼到不讓按 Enter 的輸入框（IG 簡介等）</example>
+        <example input="Tab" codepoint="U+0009">\t　貼到試算表可跳下一欄</example>
+        <example input="零寬空格" codepoint="U+200B">看不見但佔位置，可繞過「不能只留空白」的驗證</example>
+        <example input="全形空格" codepoint="U+3000">寬度等於一個中文字，中文首行縮排用</example>
+        <example input="（都沒選）">「請先選擇一個特殊字元」</example>
+      </io>
+      <remove>刪 SPECIAL_CHARS / copySpecialChar、buttons 的 special-char-group、本節點</remove>
+    </subFunction>
+
+    <remove>刪整個功能：刪除 features.js 的「功能：剪貼簿」整個區塊，並刪除本節點</remove>
+  </function>
+
+  <!-- ──────────────────────────────────────────────── -->
+  <function key="連結轉換" cmd="link" status="active" block="#region 功能：連結轉換">
+    <summary>把各種分享字串轉成乾淨格式</summary>
+    <note>三個子類型流程相同（貼字串 → 抽取 → 重組 → 複製），故整併為單一功能</note>
+
+    <uses file="custom_js/core.js" part="getCopyableHmtl" />
+    <uses file="data/return_msg_storage.js" part="rType.linkPrice" by="蝦皮口令" />
+    <uses file="data/return_msg_storage.js" part="rType.lineJoinLink" by="Line入群" />
+
+    <ui>
+      <control type="radio" name="link-mode">自動辨識、蝦皮口令、Line入群、APP深連結</control>
+    </ui>
+
+    <subFunction name="蝦皮口令" from="custom_js/shopee.js">
+      <detect>含 shp.ee ／ shopee ／ 『』</detect>
+      <io>
+        <example input="我發現超棒的東西『無線滑鼠』，售價$299-399！分享給你 https://tw.shp.ee/abc123">[無線滑鼠](https://tw.shp.ee/abc123)，售價$299-399</example>
+      </io>
+      <remove>刪 getShopeeShareHtmlC / paramShopeeShare、routeLinkConvert 的 case 'shopee'、detectLinkType 的對應判斷、buttons 的 radio、本節點</remove>
+    </subFunction>
+
+    <subFunction name="Line入群" from="custom_js/line.js">
+      <detect>含 line.me ／ 「」</detect>
+      <note>會移除網址的查詢參數（?utm_source 等）</note>
+      <io>
+        <example input="您已被邀請加入「大熊的放鬆技巧」！...https://line.me/ti/g2/cZK0vWPgtT?utm_source=invitation">[大熊的放鬆技巧](https://line.me/ti/g2/cZK0vWPgtT)</example>
+      </io>
+      <remove>刪 getLineJoinLinkHtml / paramLineJoinLink / cleanUrlParams、case 'line'、對應判斷、radio、本節點</remove>
+    </subFunction>
+
+    <subFunction name="APP深連結" from="(本次新增)">
+      <detect>含 play.google.com/store/apps ／ androidapp://</detect>
+      <note>雙向互轉，依輸入格式自動決定方向</note>
+      <note>
+        id= 後面（或 androidapp:// 後面）的內容原樣取用，不驗證它像不像套件名稱。
+        轉換器只負責互換寫法，內容合不合理由使用者決定。
+      </note>
+      <note>
+        原本另外支援「只貼純套件名稱也視同深連結」，但那只是我猜測需求時多加的，
+        使用者確認不需要，2026-08-17 已移除（見下方 history）。
+        只支援兩種帶明確標記的寫法互轉。
+      </note>
+      <io>
+        <example input="https://play.google.com/store/apps/details?id=com.spotify.music">androidapp://com.spotify.music</example>
+        <example input="androidapp://com.spotify.music">https://play.google.com/store/apps/details?id=com.spotify.music</example>
+      </io>
+      <remove>刪 getAppLinkHtmlC / paramAppLink、case 'applink'、對應判斷、radio、本節點</remove>
+    </subFunction>
+
+    <remove>刪整個功能：刪除 features.js 的「功能：連結轉換」整個區塊，並刪除本節點</remove>
+  </function>
+
+  <!-- ──────────────────────────────────────────────── -->
+  <function key="計算機" cmd="calc" status="active" block="#region 功能：計算機" from="(本次新增)">
+    <summary>在對話框直接打算式就得到答案，仿 LINE 電腦版的對話框計算機</summary>
+    <note>
+      參考來源：LINE 電腦版可在訊息框輸入算式，再打一個 = 即自動算出結果。
+      支援 + - * /、遵循先乘除後加減、不支援 %（本功能刻意比照，未擅自加上）。
+    </note>
+    <note>本功能沒有選項，故不會顯示選項表；也沒有畫面按鈕（buttons 為空字串）</note>
+    <note>
+      不使用 eval()。自行實作 tokenize + 遞迴下降：
+        expression := term (('+'|'-') term)*
+        term       := factor (('*'|'/') factor)*
+        factor     := ('+'|'-')? primary
+        primary    := number | '(' expression ')'
+      浮點雜訊以 toPrecision(12) 收斂（0.1+0.2 → 0.3）。
+    </note>
+    <note>全形符號與全形數字會先正規化（CALC_ALIASES）—— 這是輸入容錯，不改變計算規則</note>
+
+    <uses file="custom_js/core.js" part="getCopyableHmtl" />
+    <uses file="data/return_msg_storage.js" part="rType.copyCodeBlock" indirect="經由 getCopyableHmtl" />
+
+    <io>
+      <example input="1+2*3">7　先乘除後加減</example>
+      <example input="1+2*3=">7　結尾的 = 會忽略（比照 LINE 的打法）</example>
+      <example input="(1+2)*3">9</example>
+      <example input="10/4">2.5</example>
+      <example input="-3+5">2</example>
+      <example input="0.1+0.2">0.3　浮點雜訊已收斂</example>
+      <example input="１＋２×３">7　全形自動轉換</example>
+      <example input="1/0">✗ 不能除以 0（確定錯誤）</example>
+      <example input="1+">… 算式不完整（還沒打完，見下方 history「預覽分辨還沒打完與打錯了」）</example>
+      <example input="(1+2">… 括號沒有成對（還沒打完，同上）</example>
+      <example input="50%">✗ 不支援 %（與 LINE 相同，確定錯誤）</example>
+    </io>
+
+    <remove>刪除 features.js 的「功能：計算機」整個區塊，並刪除本節點</remove>
+  </function>
+
+  <function key="default" status="active" listed="false" block="#region 功能：default (預設)">
+    <summary>沒選擇功能時的後備：說明書區塊顯示「操作說明」（全鍵盤操作方式、返回鍵、即時預覽等），buttons 為空字串</summary>
+    <note>key 為 default 者不會出現在下拉選單，也不列入自動比對（listed="false"）</note>
+    <note>
+      主選單本身的功能一覽已經移到對話框（DOMContentLoaded 時 echo(getMenuHtml())），
+      不再放這裡；這裡的 help 只保留「怎麼操作」這種給不熟的人查的靜態說明。
+    </note>
+    <remove>刪除後，未選功能時畫面會是空白（不會出錯）</remove>
+  </function>
+
+</file>
+
+
+<!-- ================================================================================ -->
+<!-- 歷史紀錄：已修正的問題與已刪除的東西，供日後回顧                                  -->
+<!-- ================================================================================ -->
+<history>
+  <fix date="2026-08-17" title="專案總體檢：複製日期「還沒打完」誤判，以及多處文件補漏">
+    背景：使用者要求整理整個專案、確認 functionMap.xml／README.md 是否跟得上最新程式碼。
+    逐一比對 features.js 實際登記的功能／選項代號、functionMap.xml 的 &lt;function&gt; 節點、
+    README 的說明，找到並修正以下幾件事：
+
+    一、真正的功能性 bug（不只是文件過時）：
+    複製日期的「還沒打完 vs 打錯了」判斷（buildDateText 的 typing 檢查）只看形狀
+    （0~8 位數字＋可選的「.」加 0~6 位數字），沒有分辨「位數還沒到、可能繼續打就對了」
+    跟「位數已經到位、但數值本身不合法」。例如 20231301（月份 13 不存在，已滿 8 位）、
+    1231.2565（時間 25:65 不合法，時間段已滿 4 位）都被誤判成「還沒打完」的灰色「…」，
+    但這兩者已經是完整長度，再打下去也救不回來，該是紅色「✗」的確定錯誤。
+    改寫成新函式 isTypingDate()：日期段合法長度 3／4／7／8，時間段合法長度 2／4／6，
+    只有「還沒打到任何合法長度、但還有機會繼續打」才算「還在打」；
+    某一段位數已經到位卻仍解析失敗，代表那段數值本身有問題，直接判定確定錯誤。
+    用 jsdom 逐一驗證 12 組案例（含原本會誤判的兩組、原本就正確的「1231」「1231.115959」
+    「1231.11.22」「abc」等），並重跑所有既有測試確認無回歸。
+
+    二、文件過時／彼此矛盾（已修正）：
+      - &lt;functionMap app updated="..."&gt; 停在 2026-08-16，沒跟上這一整天的變動 → 改今天。
+      - &lt;provides name="getOptionTableHtml"&gt; 還寫著「選中者標亮」，但這個標亮
+        已經在稍早的 fix 拿掉了 → 補上說明目前不再標亮及原因。
+      - core.js 的 &lt;desc&gt; 完全沒提到「主選單路徑指令」「?q= 網址自動送出」
+        「頁面載入自動 focus」這三個這一天新增的能力 → 補上。
+      - 計算機 &lt;io&gt; 範例把「算式不完整」「括號沒有成對」標成 ✗（確定錯誤），
+        但這兩者依照更早一則 fix 的規則其實是「…」（還沒打完）→ 訂正並加註說明。
+      - key="default" 的 &lt;summary&gt; 還寫著「通用按鈕 + 數字 +1 的預設回覆」，
+        是很舊版本的敘述，現在 default 其實是「操作說明」靜態說明頁 → 改寫。
+      - 剪貼簿 onPreview() 的其中一則 history（空白／換行類字元改用符號顯示）
+        內文寫「「解讀」與「得到」兩列」，但那則 fix 寫成的時間點標籤其實
+        已經改名叫「進入」了（同一天但更早的 fix 做的重新命名）→ 訂正成「進入」。
+        features.js 裡也有一處程式註解犯一樣的錯，一併訂正。
+
+    三、順手清掉的死代碼：
+      styles.css 的 .preview-note 規則整個專案沒有任何地方在用（是更早期、
+      被目前 as／previewRow 機制取代掉的舊設計殘留），直接刪除。
+
+    四、順手補齊的使用者可見說明：
+      default 功能的「操作說明」表格（使用者在 app 內就看得到的說明，不是只有
+      README 才有）沒有提到主選單路徑指令這個新功能，補上一列
+      「1 1 t → 一次到位」，跟 README 的說明對齊。
+  </fix>
+
+  <fix date="2026-08-17" title="剪貼簿方框 UI：聊天框一有新輸入就清空上次送出的殘留紀錄">
+    背景：#repeat-text／#repeat-count 這兩個方框，本來就會在聊天框送出後
+    同步顯示「這次送出了什麼」（getRepeatHtmlC() 送出後寫回欄位），
+    讓方框變成一個「上次送出紀錄」的展示。使用者確認這個保留紀錄的行為
+    是刻意要的，但同時指出一個沒處理到的情況：如果聊天框已經開始打
+    新的東西（onchange／oninput），方框裡顯示的還是「上一次」的舊紀錄，
+    這時候舊紀錄跟正在打的新內容已經無關，留著容易讓人誤會方框顯示的
+    就是「現在」對應的結果。
+
+    解法：features.js 新增 clearRepeatFieldsOnChatInput()，清空
+    #repeat-text／#repeat-count／#repeat-preview 三者；core.js 在
+    #chat-input 的全域 input 監聽器裡，沿用 today-checkbox 那個「查有沒有
+    這個元素」的既有作法（core 不需要認識剪貼簿本身），偵測到 #repeat-text
+    存在就呼叫它。
+
+    刻意不呼叫 updateRepeatPreview()／getRepeatParams() 來做這件事：
+    getRepeatParams() 會把空的次數欄位夾回預設值 1（次數限制 1~1000 的
+    既有邏輯），如果借用它來清空，次數欄位反而會被寫回「1」而不是真的清空，
+    跟「都淨空」的要求不符，所以另外寫一個不經過那段夾值邏輯的清空函式。
+
+    範圍界定：只有「聊天框」的真實輸入事件（使用者實際打字）才會觸發清空；
+    程式自己把聊天框清空（例如送出後 input.value = ''）是直接改屬性，
+    不會觸發 input 事件，所以送出當下方框同步寫入的「上次紀錄」不會被
+    立刻洗掉。方框 UI 自己的欄位（#repeat-text／#repeat-count）互相之間
+    打字也不受影響，因為監聽的是 #chat-input，不是這兩個欄位本身。
+
+    測試：以 jsdom 驗證送出「哈 5」後方框正確同步顯示；送出後聊天框被程式
+    清空，方框紀錄仍保留；接著在聊天框真正打字（觸發原生 input 事件），
+    方框與預覽都變成真正的空字串（不是被夾回的「1」）；在方框 UI 自己打字
+    不受影響；切到其他功能（#repeat-text 不存在）時聊天框打字不會報錯。
+  </fix>
+
+  <fix date="2026-08-17" title="修正：多行輸入開頭若整行是空白，會被 trim() 吃掉">
+    問題：使用者想用聊天框做「80 個空格」——多行打一個空白字元、Shift+Enter、
+    再打 80。照設計，多行時最後一行是次數、前面原樣保留，理論上該成立。
+    但 addMessage() 一開始就對整段輸入做 input.value.trim()，而 trim() 是對
+    「整個字串」的頭尾去空白，不是只去掉最外層那一行的頭尾——當要重複的文字
+    剛好整行是空白、又剛好在輸入的最前面時，trim() 連中間的換行都一起吃掉，
+    「 」+換行+「80」直接被吃成「80」，重複的文字整個消失。
+    這解釋了使用者原本的疑問「沒辦法輸入空格／換行／數字」：不是語法真的不
+    支援，是這個邊界情況被 trim() 默默破壞了，而且因為預覽當時也看不出空白
+    （見下一則 fix），沒辦法早點發現是哪裡出錯。
+
+    解法：state.userMessage 的賦值改成「多行就整段照原樣用，單行才 trim()」——
+    單行輸入原本允許使用者不小心多打的頭尾空白被清掉（這是合理的容錯），
+    但多行輸入本來就是刻意要保留原樣空白的通道，不該再套用同一套清理規則。
+    對話框裡使用者訊息泡泡的顯示文字（pushMessage 的 displayText）比照辦理，
+    不然泡泡顯示的內容會跟實際送出、複製的內容對不上。
+    連帶讓 .bubble.user 加上 white-space: pre-wrap，多行使用者輸入才會照原樣
+    換行顯示，不會被壓成一行。
+
+    測試：以 jsdom 驗證「空白 + 換行 + 80」正確複製出 80 個空白字元；
+    並重跑所有既有的剪貼簿測試（含尾端空白保留「哈 \n3」、多行文字
+    「第一行\n第二行\n3」、單行意外頭尾空白「  哈 3  」會被清掉）確認沒有
+    回歸；額外測試整段都是空白的多行輸入（如「\n \n」）會被功能自己的驗證
+    擋下，不會出錯。
+  </fix>
+
+  <fix date="2026-08-17" title="剪貼簿預覽：空白／換行類字元改用看得見的符號顯示">
+    背景：緊接上一則 fix 發現的——就算重複的文字本身邏輯正確，只要內容是
+    空白、換行、Tab 這類看不見的字元，不管是聊天框的即時預覽還是上方欄位的
+    預覽，看起來都跟沒打字一樣，沒辦法確認到底對不對。使用者原話：
+    「底下用正規的方式，用框框來做是可以做，但是在預覽框裡根本看不出」。
+
+    解法：新增 visualizeForPreview()，只用在預覽顯示：空白 → ·、換行 → ↵
+    （後面仍保留真正的換行）、Tab → ⇥。套用在兩個地方：
+      updateRepeatPreview()（上方欄位的預覽框 #repeat-preview）
+      剪貼簿 onPreview()（聊天框的即時預覽，「進入」與「得到」兩列都套用）
+    只影響預覽怎麼「顯示」，複製到剪貼簿、以及最終結果氣泡裡的內容都還是
+    原始、沒被替換過的文字，不會把 · 這個符號誤複製出去。
+  </fix>
+
+  <fix date="2026-08-17" title="visualizeForPreview() 擴大到所有看不見的字元，不逐一列舉">
+    問題：使用者追問零寬空格（U+200B）這種還是看不出來——因為上一則 fix
+    只換了空白／換行／Tab 這三種，零寬空格、NBSP、全形空格、BOM 之類的
+    Unicode「看不見」字元完全沒列到，還是跟沒打字一樣。
+
+    使用者的方向很明確：不要逐一列舉，通通用跟空格一樣的 · 表示就好——
+    預覽只是要讓人確認「這裡有東西」，不需要分辨是哪一種看不見的字元。
+
+    解法：改用 Unicode 字元分類一次涵蓋，不再窮舉：
+      \p{Zs}  所有空格類（一般空格、全形空格、NBSP…）
+      \p{Cf}  格式字元（零寬空格 ZWSP、ZWJ、ZWNJ、BOM…）
+      \p{Cc}  控制字元（含 \t、\n 本身）
+    全部落在同一個 replace(regex, function) 裡一次處理：命中 \t 顯示 ⇥、
+    命中 \n 顯示 ↵ 並保留真正的換行、其餘一律顯示 ·。
+
+    過程中抓到一個先做兩次 .replace() 串接寫法的 bug：先把 \n 換成
+    「↵ + 真正的換行」，那個新插入的換行字元本身也符合 \p{Cc}，
+    會被下一輪 catch-all 正規式再吃一次、變成 ·，導致換行顯示壞掉
+    （驗證時發現 visualizeForPreview('\n') 印出 "↵·" 而不是 "↵\n"）。
+    改成單一 pass 的 replace(regex, function) 一次處理完，不會有「插入的
+    替代字元又被同一個規則重新比對」的問題。
+
+    測試：以 jsdom 逐一驗證空格／ZWSP／NBSP／全形空格都變成 ·、
+    Tab 變成 ⇥、換行變成「↵ + 真正的換行」（不是 ↵·）、混合文字
+    「a+ZWSP+b」正確顯示成「a·b」；並用聊天框多行輸入「零寬空格」+「5」
+    端到端測試，確認實際複製出來的是 5 個真正的零寬空格（不是 · 這個符號），
+    預覽正確顯示「·····」。
+  </fix>
+
+  <fix date="2026-08-17" title="選項表格不再標示「目前選到哪個」">
+    背景：getOptionTableHtml() 原本會幫目前選中的那一列加 class="current"，
+    styles.css 用比標頭淡的黃色背景highlight它。使用者原本要求「淡一點」，
+    後來想想這狀態根本不需要顯示——下方的輸入格式（`usage`／即時預覽）本身
+    就看得出現在是哪個選項，表格再標一次「目前選到哪個」只是多一份會跟畫面
+    其他地方對不齊的資訊（使用者原話：「只會造成落差」）。剪貼簿也一樣，
+    不需要在表格上特別標示。
+
+    解法：getOptionTableHtml() 拿掉 class="${radio.checked ? 'current' : ''}"，
+    表格每一列都用同一種樣式；styles.css 移除對應的 .opt-table tr.current td
+    規則（連同上一輪才調淡的顏色，一起刪掉，沒有留死規則）。
+  </fix>
+
+  <fix date="2026-08-17" title="移除 APP深連結「只貼純套件名稱」的猜測功能">
+    背景：這功能不是使用者要求的，是先前拆解「id= 後面原樣取用」的驗證邏輯時，
+    我自己多加的貼心猜測——輸入沒有任何標記（沒有 play.google.com、沒有
+    androidapp://）時，只要形狀像「含點、不含空白與 / :」就當成套件名稱處理。
+    使用者確認當初只是想做「兩種明確格式互轉」，不需要這個猜測，故整段移除。
+
+    改動：
+      paramAppLink()：刪掉「只貼套件名稱時，視同深連結」那段 pkgMatch 判斷，
+        現在只認得 store 網址（id=）與 androidapp:// 兩種明確標記。
+      detectLinkType()：自動辨識的 applink 判斷同步拿掉純套件名稱那個分支，
+        避免使用者貼純套件名稱時，自動辨識還是猜成 applink，
+        結果卻因為 paramAppLink 已經不認得而變成「無法解析」的錯誤。
+      help 區塊：拿掉「③ APP深連結　只貼套件名稱也可以」那個範例。
+      functionMap.xml：subFunction「APP深連結」的 detect／io／note 同步移除相關描述。
+
+    保留的行為（沒有動）：
+      id=／androidapp:// 後面的內容依然原樣取用、不驗證合不合理——
+      這是使用者原本就要的「純互換格式」，跟這次移除的猜測功能是兩件事。
+
+    測試時順便抓到一個既有的小 bug：buildLinkText() 判斷「要不要顯示確定錯誤（✗）
+    還是可能還沒貼完（…）」時，只看呼叫端有沒有傳 modeOverride 參數——但
+    modeOverride 只有「主選單路徑指令／功能內單行指令」那條路才會給，如果是
+    直接點畫面上的單選鈕（例如手動點「APP深連結」）再送出格式不對的內容，
+    modeOverride 是 undefined，就會誤判成「自動辨識、可能還沒貼完」，
+    顯示錯的提示語。移除純套件名稱猜測後，這條路徑變得更容易踩到（純套件名稱
+    以前幾乎都會被猜中，現在明確選了「APP深連結」卻打錯格式時才會真的失敗），
+    順手一併修掉：改成看「畫面上單選鈕目前是不是切到非 auto」，
+    不管是透過指令切的還是滑鼠點的，都算「使用者明確指定類型」。
+  </fix>
+
+  <fix date="2026-08-17" title="主選單支援路徑指令一次到位；頁面載入自動 focus 輸入框">
+    問題一：主選單只認得單一 token（編號或代號），打「1 1 t」這種
+    「功能＋選項＋參數」的路徑會被當成找不到指令，逼著使用者一定要先看到
+    「已進入」畫面，才能繼續打選項與參數 —— 但熟悉指令的人其實一眼就知道
+    「1 1 t」＝進複製日期(1)、切 / 格式(1)、帶入今天(t)，不需要中間那一步。
+
+    解法：handleCommand() 主選單分支改成先切第一個 token 出來當功能 key，
+    有剩下的字串就不叫 enterFeature()（略過「已進入」的敘述畫面），
+    改成直接切換下拉選單／重建按鈕區後，把剩下的字串原封不動交給
+    「功能內」那段既有邏輯（resolveOption + 參數判斷），選項與參數的判斷
+    完全共用同一份程式碼，沒有另外寫一套。沒有剩下的字串（只打了功能）
+    則行為不變，照樣進入該功能的畫面。
+
+    連帶讓即時預覽與提示列都認得這種路徑：主選單打多 token 時，預覽顯示
+    「進入：功能名稱 → 直接帶入「剩下的字串」」，不會誤判成找不到指令；
+    提示列補上一句「也可直接打「編號 選項 參數」一次到位」。
+
+    問題二：頁面剛載入時游標不在輸入框，全鍵盤操作還得先點一下滑鼠才能打字。
+    解法：DOMContentLoaded 收尾時呼叫 input.focus()。
+
+    問題三（原本誤解了，後來使用者澄清）：需要能用「網址帶參數」的方式，
+    開網址就直接送出指令——例如做一個捷徑／書籤，網址結尾是
+    ?q=1 1 t，打開頁面就等同貼上「1 1 t」並按下 Enter，不用手動打字。
+    這正是問題一做的路徑指令要解決的使用情境：沒有路徑指令，
+    網址帶進來的「1 1 t」也無處可送。
+
+    解法：DOMContentLoaded 收尾時讀 URLSearchParams(location.search).get('q')，
+    有值就填進輸入框、呼叫 addMessage() 直接送出，送完用
+    history.replaceState 把網址上的 ?q= 拿掉（重新整理不會再送一次）。
+    只在真正載入時處理（跟開場的 echo(getMenuHtml()) 同一批初始化），
+    bfcache 還原不會重複觸發。
+
+    測試：以 jsdom 用網址 ?q=1%201%20t 開啟頁面，確認會自動複製
+    「/ 2026年8月17日 星期一」到剪貼簿、對話框出現對應的使用者訊息氣泡與
+    結果氣泡、下拉選單正確切到「複製日期」、網址上的 ?q= 事後被清掉、
+    輸入框送出後清空。
+
+    連帶測試（問題一）：以 jsdom 逐一驗證「1 1 t」（複製日期 / 格式今天）、
+    「2 rep 哈 5」（剪貼簿重複文字）、「4 1+2」（計算機，無選項功能）、
+    「1 1」（只給選項、沒給參數，仍正常停在「已切換選項」畫面）、
+    單一 token 的舊行為（如「計算機」）不受影響、
+    以及第一個 token 對不上任何功能時（如「9 1 t」）仍照舊顯示「找不到指令」。
+  </fix>
+
+  <fix date="2026-08-17" title="剪貼簿預覽：還沒填完次數時，也要先講是「重複文字」">
+    問題：剪貼簿的輸入形狀本身就能唯一判斷是「重複文字」——
+    因為選項裡只有它吃參數，任何打到 onPreview 的內容（不管是單行沒對上選項代號、
+    還是換行輸入）就一定是要重複文字，不會是別的選項。
+    但 onPreview 只在成功算出結果時才回傳 as，還沒打完次數前只顯示灰色「…
+    還差次數」，使用者看不出「現在已經確定是重複文字模式了」，容易誤以為
+    還沒選定、或懷疑打錯了選項。
+
+    解法：onPreview 的 error／incomplete 分支也一併回傳 as: '複製-重複文字'，
+    讓「進入」列從輸入的第一個字就顯示出來，不用等到整段打完才知道。
+
+    附註：同一輪把這列的標籤從「解讀」改名為「進入」，
+    呼應主選單選到功能時同樣用「進入」表示——「已經確定要走這條路了」。
+  </fix>
+
+  <fix date="2026-08-17" title="預覽分辨「還沒打完」與「打錯了」">
+    問題：預覽是邊打邊看的，輸入到一半本來就不合法，
+    但它一律顯示紅色 ✗，例如剪貼簿多行打到「1(換行)abc」還沒填次數就被說格式錯誤。
+
+    解法：onPreview 可回傳 { error, incomplete: true }，核心改以灰色「…」呈現。
+    判斷準則是「再多打幾個字有沒有可能變成合法」：
+      剪貼簿  缺次數／最後一段還不是數字 → 未完成
+              次數已完整但超出 1~1000    → 確定錯誤
+      複製日期 只由數字與小數點構成、或還在拼 today／今天 → 未完成
+              其餘（如 abc）             → 確定錯誤
+      計算機  算式不完整、括號沒成對      → 未完成
+              不認識的符號、除以 0        → 確定錯誤
+      連結轉換 自動辨識時認不出            → 未完成（可能只是還沒貼完）
+              已指定類型但內容對不上      → 確定錯誤
+
+    注意：這只影響「預覽怎麼呈現」。送出時 incomplete 仍然照樣擋下，
+    錯誤訊息也保留完整的格式教學；預覽則只取第一句，避免灰色提示太長。
+  </fix>
+
+  <fix date="2026-08-17" title="剪貼簿：重複文字納入選項；新增「選項即動作」機制">
+    問題：重複文字被架在選項之外，導致它與四個特殊字元的關係說不清楚，
+    也是先前一連串輸入歧義的來源。
+
+    重整為單一選項組（name=clip-mode）：
+      1 rep 重複文字（唯一需要參數）　2 nl 換行　3 tab　4 zw 零寬空格　5 fw 全形空格
+
+    由此得到兩個乾淨的推論：
+      a. 特殊字元不吃參數 → 選到就該直接複製，不必再按按鈕。
+         為此在核心新增 onOptionChange(optionValue) 鉤子：
+         只指定選項、未帶參數時呼叫，回傳 HTML 即代表「這個選項本身是一個動作」。
+      b. 只有選項 1 需要參數 → 只要給了參數就一定是要重複文字，
+         因此 onSubmit 會自動把選項歸位到 1。這不是猜測，是唯一的解釋。
+
+    另：進入功能的附註補上 Shift+Enter 的說明（先前只寫在說明書裡，氣泡沒提）。
+  </fix>
+
+  <fix date="2026-08-17" title="三處顯示的資訊分工，消除重複">
+    現象：提示列塞了用法、例子、完整選項清單與返回鍵說明，
+    而這些在「進入功能」的氣泡裡已經全部講過一次。
+
+    分工原則：
+      對話框氣泡  進入功能時給完整資訊（選項表、例子），資訊量最大但會被捲走
+      提示列      常駐，只講「你在哪、該打什麼形狀」，必須短
+      即時預覽    唯一解讀輸入內容的地方，講「這次送出會怎樣」
+
+    連帶把 usage 拆成兩個欄位：usage 只留簽章（給提示列），
+    examples 獨立（只在氣泡顯示）。主選單表格的「用法」欄也因此變短好讀。
+  </fix>
+
+  <fix date="2026-08-17" title="提示列與預覽的分工：能力 vs 後果">
+    現象：主選單打「1」，提示列顯示「找不到符合『1』的指令」，
+    但預覽顯示「進入 複製日期」，而按下 Enter 真的會進去 —— 兩者互相矛盾。
+
+    根因：提示列自己另寫了一套比對（只認 cmd 字串），
+    與真正決定行為的 resolveFeatureKey（還接受編號、功能全名、唯一前綴）對不上。
+    同一段輸入被兩處各自解讀，既重複又必然走鐘。
+
+    解法不是把比對邏輯抄一份過去，而是分工：
+      #cmd-hint     只講「你在哪、能做什麼」，完全不解讀輸入內容（靜態）
+      #live-preview 只講「這次輸入送出後會怎樣」（動態，唯一的解讀者）
+    如此就不存在兩份需要同步的比對邏輯。
+    Tab 補全仍用 getCommandCandidates()，但它只負責填字，不負責顯示判斷。
+  </fix>
+
+  <fix date="2026-08-17" title="返回改用單鍵 x；預覽加上「怎麼解讀」；蝦皮改回嚴格">
+    一、手機沒有 Esc 鍵，返回等於無法操作。新增單鍵 x（送出即返回），
+    與 Esc 共用 goBack()。x 置於解析流程最前面，故待補提問中也能取消。
+    已確認 x 不與任何功能代號或選項代號衝突，且「x 3」這種帶參數形式不受影響。
+
+    二、預覽只給結果，看不出縮寫被怎麼解讀（例如「2 t」的 t）。
+    onPreview 新增選填的 as 欄位，由功能回報它如何解讀輸入：
+      複製日期 → t ＝ 2026/8/17(週一) 15:40:52　今日
+      剪貼簿   → 「哈」重複 25 次
+      連結轉換 → 自動辨識為「蝦皮口令」
+    預覽改為分層顯示：選項 → 解讀 → 得到／✗／？。
+
+    三、蝦皮改回嚴格：標題、網址、售價三者缺一即視為格式錯誤。
+    先前「有標題沒售價就改用不含售價的模板」是過度包容 —— 那不是完整的分享文。
+  </fix>
+
+  <fix date="2026-08-17" title="APP 深連結放寬驗證；順帶修正蝦皮的 null 輸出">
+    問題一：套件名稱原本限定 [A-Za-z0-9_.]，導致
+    https://play.google.com/store/apps/details?id=com.有的沒的APP 被判為無法解析。
+    但轉換器的職責只是互換兩種寫法，不該檢驗內容 —— 已改為 id= 後面到 &amp; 或空白為止原樣取用。
+    只有「單獨貼套件名稱」這種沒有標記可辨識的情況仍需特徵（含點、不含空白與 / :），
+    否則任意文字都會被當成套件名稱，也會影響 detectLinkType 的判斷順序。
+
+    問題二（放寬後測出的既有 bug）：paramShopeeShare 的 isValid 用 some()，
+    只要任一欄位非空就通過，所以單獨貼一條 shp.ee 網址也算「分享文」，
+    再套上售價模板就印出 [null](網址)，售價$null。
+    已改為必須同時有標題與網址；沒有售價時改用不含售價的模板。
+  </fix>
+
+  <fix date="2026-08-17" title="通用即時預覽：邊打邊顯示送出後會得到什麼">
+    做法：功能提供 onPreview(userMessage, state, optionValue)，回傳
+      { text }  送出後會得到這段文字
+      { error } 這樣送出會失敗，附原因
+      { need }  還缺東西，送出後會回問
+    核心負責主選單（會進入哪個功能）與選項切換的預覽；沒提供 onPreview 的功能就不顯示。
+
+    ★ 前提是「算結果」與「複製／改畫面」必須分離，否則光是預覽就會寫進剪貼簿。
+    因此把三個功能都拆出純計算函式：
+      buildDateText()／parseRepeatInput()／buildLinkText()（含 buildShopeeText 等三個子函式）
+    原本的 getXxxHtmlC() 變成薄薄一層包裝：呼叫純函式 → 交給 getCopyableHmtl()。
+    這也是這次改動最大的收穫 —— 預覽只是誘因，計算與副作用分離才是真正的改善。
+
+    另：parseDateString() 增加 silent 參數，預覽時不輸出 console 錯誤，免得打字時洗版。
+  </fix>
+
+  <fix date="2026-08-17" title="重複文字改為嚴格格式，有歧義就擋下">
+    起因：使用者指出單行格式看不懂，且實測發現「5」會被當成「重複 5 這個字 25 次」。
+    更根本的問題是：單行時分隔文字與次數的只有空白，
+    因此「文字尾端本身就有空白」與「這個空白是分隔符」在資訊上無法區分。
+
+    決策：不猜。有歧義的格式一律擋下並說明原因，
+    並提供多行寫法作為明確的出口（最後一行是次數，前面原樣保留）。
+    連帶移除「沒給次數就沿用畫面欄位」這個隱性行為 —— 那也是一種猜測。
+  </fix>
+
+  <fix date="2026-08-17" title="等寬字型與 usage 字串修正">
+    問題一：usage 仍寫著舊的數字範例（3 1231／5 t），是代號改版時腳本中斷未存檔的殘留。
+    已改為代號版本，且範例包進 code 標籤以套用等寬字。
+    另把示範中的 t 改寫成 today（t 仍然可用），減少單字母造成的誤讀。
+
+    問題二：Comic Sans 的小寫 t 呈十字形，指令代號在其中很容易看錯。
+    改用 --mono 變數集中管理等寬字型，套用到 code、提示列、預覽框、格式標記表等 8 處。
+  </fix>
+
+  <fix date="2026-08-17" title="輸入框改為多行，用「換行」區分指令與資料">
+    起因：剪貼簿的「重複文字」與選項代號會撞 —— 打「n 5」想重複 n 五次，
+    卻被解讀成「選項 nl + 參數 5」。加了代號之後衝突面反而從數字擴大到 n/t/z/f/nl/tab。
+
+    根因不在解析器而在結構：複製日期與連結轉換的選項是「同一份參數的不同模式」，
+    但剪貼簿的特殊字元跟重複文字的參數毫無關係，它其實是兩個動作。
+
+    解法不是拆功能，而是把輸入框從 input 換成 textarea，並定下規則：
+      多行輸入一律視為純參數，不解析選項。
+    因為選項本質是單一 token、不可能跨行，「有換行」就是明確的「這是資料」信號。
+    於是「n(換行)5」不再有歧義，衝突消失而非被繞過。
+
+    連帶得到的好處：
+      1. 蝦皮／Line 的分享文字本來就是多行，過去貼進單行 input 會被壓扁
+      2. 自訂格式的多行格式字串可直接在聊天框給，不必另開欄位
+      3. 要重複的文字本身可以含換行
+
+    按鍵：Enter 送出、Shift+Enter 換行；主選單不接受多行輸入。
+  </fix>
+
+  <fix date="2026-08-17" title="選項改用可讀代號，並收斂退出路徑">
+    問題一：選項原本只能用編號指定，而 radio 的 value 是內部值（/、()、(pp)、(by)m），
+    對使用者毫無意義。改為在 radio 上加 data-cmd 宣告可讀代號：
+      複製日期 s／b／p／ma／cust
+      連結轉換 auto／sp／line／app
+      剪貼簿   nl／tab／zw／fw
+    編號與代號兩種都可用，代號支援唯一前綴（cu → cust、m → ma）。
+    代號就寫在產生 radio 的同一行，不另建對照表，因此不會有兩邊不同步的問題。
+
+    問題二：退出原本有「空白 Enter」與「Esc」兩條路徑，重複。
+    移除空白 Enter，統一由 Esc 一鍵三用（取消提問 → 清空輸入 → 退出）。
+
+    連帶：進入功能時的選項改用表格呈現（#／代號／選項），與主選單一致；
+    原本的膠囊標籤 .opt-tag 已移除。
+  </fix>
+
+  <fix date="2026-08-17" title="快捷路徑：選項編號 + 參數一次送出，並新增「待補參數」機制">
+    需求：原本要先送出「3」切格式、再送出「1231」，兩步太慢。改成「3 1231」一次到位。
+    與原邏輯的關係：新式是舊式的超集 —— 單獨數字等於「參數為空」，兩者不衝突。
+
+    衝突點在選項五（自訂格式）：它需要一個尚未提供的格式字串。
+    解法是在核心加一個通用的待補機制，而不是替日期功能開特例 ——
+    功能的 onSubmit 可回傳 { prompt, resume }，核心存進 state.pending，
+    下一句輸入即交給 resume()。已解析的日期靠閉包保存，不必額外開全域變數。
+    待補狀態的判斷優先於一切指令解析（否則答案「1」會被誤判成切換選項）。
+    空白 Enter 在待補時是取消提問、留在功能內；再按一次才退出。
+
+    已知取捨：像剪貼簿這種「參數本身可能以數字開頭」的功能，
+    輸入「1 5」會被解讀成「選項1 + 參數5」而非「重複文字1五次」。
+    這是無前綴設計的必然代價，改用畫面欄位即可避開。
+  </fix>
+
+  <fix date="2026-08-16" title="加入指令層，聊天框可全鍵盤操作">
+    設計取向：不用前綴、不用旗標，靠「模式」避免指令與一般輸入衝突。
+    主選單解析指令、功能內解析參數，兩者互不干擾。
+    功能內的單獨數字之所以不會誤判成參數：日期至少 3 碼、連結必含符號，
+    所以 1~9 這種輸入在任何功能裡都不是合法參數。
+    指令表由 registry 自動生成 —— 這是「核心不認識功能」這個架構的直接紅利。
+  </fix>
+
+  <fix date="2026-08-16" title="點選項旁邊的空白處會誤選該選項">
+    原因：.radio-group 是 display:block、.radio-option 是 display:flex，
+    每個 label 都被撐成整列滿寬，所以選項文字右側那片「看起來的空白」仍在 label 範圍內，
+    點下去就被判定成點到該選項。
+    修正：.radio-option 加上 width: fit-content（配 max-width:100% 防窄螢幕溢出），
+    讓 label 只包住自己的內容。
+    附註：這與 blur 的時序無關，不需要防抖。
+    blur 一次互動只觸發一次，防抖只是延遲；要判斷「焦點跑去哪」應使用 event.relatedTarget，
+    它在 blur 當下就知道，不必等 click(mouseup)，因此不會有中間狀態的閃爍。
+  </fix>
+
+  <fix date="2026-08-15" title="離線重新進入後，選單顯示與實際功能不一致">
+    原因：updateActionButtons() 只綁在 select 的 onchange。
+    但「重新載入時瀏覽器自動還原表單值」與「bfcache 還原」兩種情況，
+    都會恢復選單的值卻不觸發 change，導致畫面上的選單值 ≠ 實際生效的功能。
+    修正：DOMContentLoaded 末端主動呼叫一次，並加上 window pageshow 監聽。
+  </fix>
+
+  <fix date="2026-08-15" title="核心寫死功能判斷，導致無法單獨移除功能">
+    原因：chat-functions.js 的 generateResponse() 寫死 if (headerSelect === '複製日期')...，
+    且下拉選單的 option 寫死在 html，一個功能散落在三個地方。
+    修正：改為 registry 模式，功能自行 registerFeature() 登記，核心不認識任何功能。
+  </fix>
+
+  <removed name="custom_js/cmd_clipboard.js" date="2026-08-15">
+    原檔內容其實是 shopee.js 的完整重複複製，與檔名完全無關，已刪除。
+    剪貼簿功能於本次重新實作。
+  </removed>
+
+  <removed name="下拉選項：爬地圖 / 其他" date="2026-08-15">
+    原本只是佔位選項，沒有任何實作，故未登記。
+    日後要做時，在 features.js 新增一個區塊 registerFeature 即可自動出現在選單。
+  </removed>
+
+  <removed name="js/（jquery.min.js、qrcode.js、qrcode.min.js）" date="2026-08-17">
+    整個資料夾刪除。確認方式：index.html 從沒有任何 &lt;script src="js/..."&gt;，
+    全專案（含 features.js／core.js）也沒有任何 $(...)／jQuery／QRCode 呼叫，
+    純粹是專案剛開始時留下、從未真正用到的第三方檔案。
+    使用者明確要求「真的確定都沒用到就刪掉」，故直接整個資料夾一併移除，
+    不留佔位；functionMap.xml 對應的 &lt;file path="js/"&gt; 節點與 README 的
+    檔案結構圖同步拿掉。
+  </removed>
+</history>
+
+</functionMap>

@@ -1,14 +1,30 @@
+//================================================================================================
+/*
+ * return_msg_storage.js - 純資料層：可重複使用的字串模板
+ *
+ * 只放「多個功能共用」或「常需要調整措辭」的模板。
+ * 各功能專屬的按鈕/說明 HTML 已改放在 features.js 的 registerFeature 內，
+ * 以確保「一個功能 = 一個區塊」，刪除時不會有殘留。
+ *
+ * 用法：
+ *   const tmp = returnMsgStorage.rType.find(item => item.key === 'linkPrice')?.value;
+ *   const str = new Function('title','url','price', `return \`${tmp}\`;`)(t, u, p);
+ */
+//================================================================================================
 const returnMsgStorage = {
     "rType": [
         {
+            // 蝦皮口令的輸出格式
             "key": "linkPrice",
             value: `[\${title}](\${url})，售價$\${price}`
         },
         {
+            // Line入群連結的輸出格式
             "key": "lineJoinLink",
             value: `[\${title}](\${url})`
         },
         {
+            // 「可複製區塊」的外框，由 core.js 的 getCopyableHmtl() 使用
             "key": "copyCodeBlock",
             value: `
                 <div class="bubble assistant">
@@ -17,95 +33,7 @@ const returnMsgStorage = {
                     <button class="copy-button" onclick="copyCodeblock('\${codeBlockId}')">複製</button>
                 </div>
             `
-        },
-        {
-            "key": "shopeeCodeGenerated",
-            "value": "生成蝦皮口令成功！"
-        },
-        {
-            "key": "copySuccess",
-            "value": "已複製到剪貼簿！"
-        },
-        {
-            "key": "copyFail",
-            "value": "複製失敗，請檢查瀏覽器權限或功能支援！"
-        },
-        {
-            "key": "copyableTextHTML",
-            "value": "複製失敗，請檢查瀏覽器權限或功能支援！"
-        }
-    ],
-    "cType": [ // clipboard
-        {
-            "key": "gd",
-            value: `
-				- 摺疊
-					${'```'}
-					
-					${'```'}
-			`
-        },
-        {
-            key: "aa",
-            value: () => {
-				// 這裡是函式內容
-				console.log("- 摺疊\n``` \n\n```");
-            }
-			// cType['aa'].value(); // 執行第一個功能
-        },
-        {
-            key: "example",
-            value: (param) => {
-				// 可以接受參數並執行邏輯
-				console.log(`執行參數為：${param}`);
-            }
-			// cType['example'].value("測試參數"); // 執行第二個功能並傳遞參數
         }
     ]
 };
-const selectedActButton = {
-    "sType": [
-        {
-            "key": "",
-            value: `<div></div>`
-        },
-        {
-            "key": "剪貼簿",
-            value: `<div></div>`
-        },
-        {
-            "key": "複製日期",
-            value: `
-				<div id="today-checkbox-group" class="checkbox-group">
-					<label><input type="checkbox" name="today-checkbox" value="today" class="checkbox" onchange="debouncedIsTodayChange(event)">今日</label>
-				</div>
-				<div id="date-format-group" class="radio-group">
-					<label class="radio-option"><input type="radio" name="date-format" value="/" checked> / 格式</label>
-					<label class="radio-option"><input type="radio" name="date-format" value="()"> () 格式</label>
-					<label class="radio-option"><input type="radio" name="date-format" value="(pp)"> 人照</label>
-					<label class="radio-option"><input type="radio" name="date-format" value="(by)m"> by媽 格式</label>
-				</div>
-            `
-        },
-        {
-            "key": "蝦皮口令",
-            value: `
-				<div id="shopee-group" class="button-group">
-					<button class="action-button" onclick="alert('生成蝦皮口令')">生成蝦皮口令</button>
-					<button class="action-button" onclick="alert('複製蝦皮口令')">複製蝦皮口令</button>
-				</div>
-            `
-        },
-        {
-            "key": "default",
-            value: `
-				<div id="default-group" class="button-group">
-					<button class="action-button" onclick="alert('舉例說明')">舉例說明</button>
-					<button class="action-button" onclick="alert('提供細節')">提供細節</button>
-					<button class="action-button" onclick="alert('翻譯成繁中')">翻譯成繁中</button>
-					<button class="action-button" onclick="alert('翻譯成英文')">翻譯成英文</button>
-				</div>
-            `
-        }
-    ]
-};
+//================================================================================================

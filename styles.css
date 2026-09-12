@@ -1,4 +1,13 @@
 /* ================================================================================================ */
+/* 字型設定 */
+:root {
+    /* 指令、代號、格式標記用的等寬字型。
+       不用 Comic Sans —— 它的小寫 t 是十字形，跟「十」容易看錯；
+       Consolas / Menlo 的 t 有明確的彎鉤，數字 0 也帶斜線或點，辨識度高。 */
+    --mono: Consolas, 'Cascadia Mono', Menlo, 'DejaVu Sans Mono', 'Courier New', monospace;
+}
+
+/* ================================================================================================ */
 /* 全局樣式 */
 body {
     font-family: 'Comic Sans MS', cursive, sans-serif;
@@ -92,6 +101,7 @@ body {
     .bubble.user {
         background-color: #c4f0c5;
         color: black;
+        white-space: pre-wrap; /* 多行輸入（蝦皮分享文、重複文字等）原樣顯示換行，不會被壓成一行 */
     }
 
     .bubble.assistant {
@@ -99,13 +109,38 @@ body {
         color: black;
     }
 
+/* 選項表格（進入功能時列出可切換的選項，與主選單同一種呈現） */
+.opt-table {
+    margin-top: 8px;
+}
+
+/* 氣泡裡的附註（如「空白 Enter 可退出」） */
+.cmd-note {
+    margin-top: 8px;
+    font-size: 12px;
+    color: #777;
+}
+
+/* 行內代碼：氣泡、說明書、提示列共用 */
+.bubble code,
+.help-block code,
+.cmd-hint code {
+    padding: 1px 5px;
+    background: #ffffcc;
+    border: 1px solid black;
+    border-radius: 3px;
+    font-family: var(--mono);
+    font-size: 0.95em;
+    letter-spacing: 0.5px; /* 代號多為短字母，拉開一點好讀 */
+}
+
 /* 代碼塊樣式 */
 .code-block {
     background-color: #ffffcc;
     border: 2px dashed black;
     padding: 10px;
     border-radius: 5px;
-    font-family: monospace;
+    font-family: var(--mono);
     white-space: pre-wrap;
     word-wrap: break-word;
     margin-top: 10px;
@@ -128,6 +163,74 @@ body {
         background-color: #e64a19;
     }
 
+/* 即時預覽：送出後會得到什麼 */
+.live-preview {
+    padding: 8px 15px;
+    background-color: #fffde7;
+    border-top: 2px dashed black;
+    font-size: 13px;
+    line-height: 1.6;
+    word-break: break-all;
+}
+
+.live-preview:empty {
+    display: none; /* 沒有內容時不佔版面 */
+}
+
+.preview-row {
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+}
+
+/* 左側標籤：得到／✗／？／進入／切換 */
+.preview-label {
+    flex: none;
+    min-width: 2.5em;
+    padding: 0 5px;
+    background: #ffeb3b;
+    border: 1px solid black;
+    border-radius: 3px;
+    font-size: 12px;
+    text-align: center;
+}
+
+/* 預覽出來的實際結果，用等寬字並保留換行 */
+.preview-text {
+    font-family: var(--mono);
+    white-space: pre-wrap;
+}
+
+/* 還沒打完：灰色，不要用錯誤的紅來嚇人 */
+.preview-row.pending {
+    color: #999;
+}
+
+.preview-row.pending .preview-label {
+    background: #eeeeee;
+    border-color: #bbbbbb;
+    color: #999;
+}
+
+/* 指令提示列 */
+.cmd-hint {
+    padding: 8px 15px;
+    background-color: #fff9c4;
+    border-top: 2px dashed black;
+    font-family: var(--mono);
+    font-size: 13px;
+    color: #444;
+    line-height: 1.6;
+}
+
+.cmd-hint b {
+    color: #e64a19;
+}
+
+.cmd-hint:empty {
+    display: none; /* 沒有內容時不佔版面 */
+}
+
 /* 底部輸入框區域 */
 .chat-footer {
     padding: 15px;
@@ -135,14 +238,26 @@ body {
     background: #ffeb3b;
     display: flex;
     gap: 10px;
+    align-items: flex-end; /* 輸入框長高時，送出鈕貼齊底部 */
 }
 
-    .chat-footer input {
+    .chat-footer textarea {
         flex: 1;
         padding: 10px;
         border: 2px solid black;
         border-radius: 5px;
         font-size: 16px;
+        font-family: inherit;
+        line-height: 1.5;
+        resize: none; /* 高度由 JS 依內容自動調整 */
+        overflow-y: auto;
+        /* box-sizing 必須是 border-box：
+           scrollHeight 含 padding，若用預設的 content-box，
+           把 height 設成 scrollHeight 會讓 padding 再被加一次，等於憑空多一行 */
+        box-sizing: border-box;
+        height: 48px;     /* 一行：16px × 1.5 + 上下 padding 20 + 上下框線 4 */
+        min-height: 48px; /* 不會比一行更矮 */
+        max-height: 120px; /* 約 5 行，再多就內部捲動 */
     }
 
     .chat-footer button {
@@ -161,7 +276,10 @@ body {
 
 /* 功能按鈕區域 */
 .action-buttons {
-    margin: 15px;
+    width: 100%;
+    max-width: 800px; /* 與 .chat-container 對齊，不超出上方聊天框 */
+    margin: 15px auto;
+    box-sizing: border-box;
     gap: 10px;
     display: flex; /* 啟用 Flex 布局 */
     flex-wrap: wrap; /* 允許按鈕換行 */
@@ -205,10 +323,197 @@ body {
     display: flex; /* 將文字與按鈕水平排列 */
     align-items: center; /* 垂直居中對齊 */
     gap: 5px; /* 單選框與文字的間距 */
+    width: fit-content; /* 只包住自己的內容 */
+    max-width: 100%;
+    /* 若省略 width，label 會被撐成整列滿寬，
+       點選項文字右側那片「看起來的空白」也會被判定成點到該選項 */
 }
 
 /* ================================================================================================ */
 
+
+/* 功能按鈕區域-剪貼簿相關 */
+
+/* 三個區塊各自獨占一整列
+   (.action-buttons 是 flex + wrap，不指定滿寬就會擠在同一列) */
+#repeat-group, #repeat-preview, #clip-mode-group {
+    width: 100%;
+    box-sizing: border-box;
+}
+
+/* 自訂格式：整列改為頂端對齊，讓多行輸入框跟單選鈕齊頭 */
+#date-custom-option {
+    align-items: flex-start;
+    margin-top: 5px;
+}
+
+/* 自訂格式輸入框：可多行、可自行拖曳調整高度 */
+.clip-textarea {
+    width: 320px;
+    max-width: 100%; /* 窄螢幕不撐破版面 */
+    box-sizing: border-box;
+    min-height: 70px;
+    padding: 10px;
+    border: 2px solid black;
+    border-radius: 5px;
+    font-size: 16px;
+    font-family: var(--mono); /* 格式字串用等寬字比較好對齊 */
+    line-height: 1.5;
+    resize: vertical; /* 只允許上下拖曳，避免撐破版面 */
+}
+
+/* 重複文字那一列、特殊字元那一列：組內水平排列並置中 */
+#repeat-group, #clip-mode-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    justify-content: center;
+}
+
+.clip-text, .clip-count {
+    margin-left: 5px;
+    padding: 6px;
+    border: 2px solid black;
+    border-radius: 5px;
+    font-size: 16px;
+    font-family: 'Comic Sans MS', cursive, sans-serif; /* 繼承漫畫風字體 */
+}
+
+.clip-text {
+    width: 120px;
+}
+
+.clip-count {
+    width: 70px;
+}
+
+/* 即時預覽（重複文字、自訂格式共用） */
+.clip-preview {
+    margin: 0 0 10px 0;
+    padding: 10px;
+    box-sizing: border-box;
+    background-color: #ffffcc;
+    border: 2px dashed black;
+    border-radius: 5px;
+    font-family: var(--mono);
+    font-size: 14px;
+    white-space: pre-wrap;
+    word-break: break-all;
+    color: #555;
+}
+
+.clip-preview:empty {
+    display: none; /* 沒有內容時不佔版面 */
+}
+
+/* 自訂格式的預覽：對齊上方輸入框，視覺上歸屬於該選項 */
+#date-custom-preview {
+    width: 320px;
+    max-width: 100%;
+    margin-left: 30px; /* 與單選鈕文字對齊 */
+    margin-top: 5px;
+}
+
+/* 說明書表格（如日期格式標記一覽） */
+.help-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+    margin-top: 5px;
+}
+
+.help-table th, .help-table td {
+    border: 1px solid black;
+    padding: 5px 8px;
+    text-align: left;
+}
+
+.help-table th {
+    background-color: #ffeb3b;
+}
+
+.help-table td:first-child {
+    white-space: nowrap;
+}
+
+/* 可點擊複製的標記欄 */
+.help-table .token-cell {
+    cursor: pointer;
+    background-color: #fffde7;
+    user-select: none;
+}
+
+.help-table .token-cell:hover {
+    background-color: #ffeb3b;
+}
+
+.help-table .token-cell:active {
+    background-color: #fbc02d;
+}
+
+.help-table .token-cell code {
+    cursor: pointer;
+}
+
+/* 說明書區塊 */
+.help-block {
+    width: 100%;
+    max-width: 800px;
+    margin: 15px auto;
+    padding: 15px;
+    background: #fffdf0;
+    border: 4px dashed black;
+    border-radius: 15px;
+    box-shadow: 5px 5px 0px rgba(0, 0, 0, 0.2);
+    font-family: 'Comic Sans MS', cursive, sans-serif; /* 繼承漫畫風字體 */
+    box-sizing: border-box;
+}
+
+.help-block:empty {
+    display: none; /* 沒有內容時不佔版面 */
+}
+
+.help-title {
+    margin: 0 0 10px 0;
+    padding-bottom: 8px;
+    font-size: 20px;
+    border-bottom: 2px solid black;
+}
+
+.help-desc {
+    margin: 0 0 10px 0;
+    font-size: 15px;
+    line-height: 1.7;
+}
+
+.help-example {
+    margin-bottom: 15px;
+    padding: 10px;
+    background: #ffffff;
+    border: 2px solid black;
+    border-radius: 8px;
+}
+
+.help-example:last-child {
+    margin-bottom: 0;
+}
+
+/* 範例的「輸入/輸出」小標 */
+.help-io {
+    margin: 8px 0 4px 0;
+    font-size: 14px;
+    font-weight: bold;
+    color: #e64a19;
+}
+
+.help-block code {
+    padding: 1px 5px;
+    background: #ffffcc;
+    border: 1px solid black;
+    border-radius: 3px;
+    font-family: var(--mono);
+}
 
 /* 手機端適配 */
 @media (max-width: 600px) {
@@ -221,10 +526,25 @@ body {
         padding: 8px;
     }
 
-    .chat-footer input {
+    .chat-footer textarea {
         font-size: 12px;
         padding: 8px;
+        height: 38px;     /* 一行：12px × 1.5 + 上下 padding 16 + 上下框線 4 */
+        min-height: 38px;
+        max-height: 90px;
     }
+
+    .cmd-hint {
+        font-size: 11px; /* 縮小文字大小 */
+        padding: 6px 10px;
+    }
+
+    .live-preview {
+        font-size: 11px; /* 縮小文字大小 */
+        padding: 6px 10px;
+    }
+
+
 
     .chat-footer button {
         font-size: 12px;
@@ -258,7 +578,90 @@ body {
         margin-bottom: 10px; /* 單選框之間的間距 */
     }
 
+	/* 功能按鈕區域-剪貼簿相關 */
+
+/* 三個區塊各自獨占一整列
+   (.action-buttons 是 flex + wrap，不指定滿寬就會擠在同一列) */
+#repeat-group, #repeat-preview, #clip-mode-group {
+    width: 100%;
+    box-sizing: border-box;
 }
 
+/* 自訂格式：整列改為頂端對齊，讓多行輸入框跟單選鈕齊頭 */
+#date-custom-option {
+    align-items: flex-start;
+    margin-top: 5px;
+}
+
+/* 自訂格式輸入框：可多行、可自行拖曳調整高度 */
+.clip-textarea {
+    width: 320px;
+    max-width: 100%; /* 窄螢幕不撐破版面 */
+    box-sizing: border-box;
+    min-height: 70px;
+    padding: 10px;
+    border: 2px solid black;
+    border-radius: 5px;
+    font-size: 16px;
+    font-family: var(--mono); /* 格式字串用等寬字比較好對齊 */
+    line-height: 1.5;
+    resize: vertical; /* 只允許上下拖曳，避免撐破版面 */
+}
+
+/* 重複文字那一列、特殊字元那一列：組內水平排列並置中 */
+#repeat-group, #clip-mode-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    justify-content: center;
+}
+
+    .clip-text, .clip-count {
+        font-size: 12px; /* 縮小文字大小 */
+        padding: 5px;
+    }
+
+    .clip-textarea {
+        font-size: 12px; /* 縮小文字大小 */
+        padding: 8px;
+        min-height: 60px;
+    }
+
+    .clip-text { width: 90px; }
+    .clip-count { width: 60px; }
+
+    .clip-preview {
+        font-size: 12px; /* 縮小文字大小 */
+        padding: 8px;
+    }
+
+	/* 說明書區塊 */
+    .help-block {
+        margin: 10px auto;
+        padding: 10px;
+    }
+
+    .help-title {
+        font-size: 16px; /* 縮小文字大小 */
+    }
+
+    .help-desc {
+        font-size: 13px; /* 縮小文字大小 */
+    }
+
+    .help-io {
+        font-size: 12px; /* 縮小文字大小 */
+    }
+
+    .help-table {
+        font-size: 12px; /* 縮小文字大小 */
+    }
+
+    .help-table th, .help-table td {
+        padding: 4px 5px;
+    }
+
+}
 
 /* ================================================================================================ */

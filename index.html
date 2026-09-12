@@ -3,44 +3,41 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>動態對話框範例</title>
+    <title>那個 QuickLine</title>
     <link rel="stylesheet" href="styles.css">
-	<script src="data/return_msg_storage.js"></script>
-    <script src="custom_js/chat-functions.js"></script>
-    <script src="custom_js/copy_Date.js"></script>
-    <script src="custom_js/shopee.js"></script>
-    <script src="custom_js/cmd_clipboard.js"></script>
+
+    <!-- 資料層：字串模板 -->
+    <script src="data/return_msg_storage.js"></script>
+    <!-- 核心層：對話框機制，不認識任何功能 -->
+    <script src="custom_js/core.js"></script>
+    <!-- 功能層：各功能自行 registerFeature() 登記 -->
+    <script src="custom_js/features.js"></script>
 </head>
 <body>
     <div class="chat-container">
         <!-- 對話框標題，替換為下拉選單 -->
+        <!-- 選項由 core.js 依已登記的功能自動產生 -->
         <div class="chat-header">
             <select id="chat-header-select" onchange="updateActionButtons()">
-                <option value="">ChatGPT 動態對話框</option>
-                <option value="剪貼簿">剪貼簿</option>
-                <option value="複製日期">複製日期</option>
-                <option value="蝦皮口令">蝦皮口令</option>
-                <option value="爬地圖">爬地圖</option>
-                <option value="其他">其他</option>
+                <option value="">QuickLine</option>
             </select>
         </div>
         <!-- 對話內容區域 -->
-        <div class="chat-content">
-            <div class="chat-bubble user">
-                <div class="bubble user">這是一個範例的使用者訊息。</div>
-            </div>
-            <div class="chat-bubble assistant">
-                <div class="bubble assistant">這是一個範例的助理回覆訊息。</div>
-            </div>
-        </div>
+        <!-- 開場的功能一覽由 core.js 依已登記的功能動態產生 -->
+        <div class="chat-content"></div>
+        <!-- 送出後會得到什麼（即時預覽） -->
+        <div class="live-preview" id="live-preview"></div>
+        <!-- 指令提示列 -->
+        <div class="cmd-hint" id="cmd-hint"></div>
         <!-- 輸入框與送出按鈕 -->
         <div class="chat-footer">
-            <input type="text" placeholder="輸入訊息...">
+            <textarea id="chat-input" rows="1" placeholder="輸入訊息…"></textarea>
             <button>送出</button>
         </div>
     </div>
     <!-- 其他功能按鈕 -->
 	<div class="action-buttons" id="action-buttons"></div>
+	<!-- 說明書區塊 -->
+	<div class="help-block" id="help-block"></div>
 </body>
 </html>
-
