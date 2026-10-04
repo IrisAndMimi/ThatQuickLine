@@ -219,7 +219,7 @@ function pushMessage(presetResponse) {
         // 建立使用者的訊息氣泡
         const userBubble = document.createElement('div');
         userBubble.className = 'chat-bubble user';
-        userBubble.innerHTML = `<div class="bubble user">${displayText}</div>`;
+        userBubble.innerHTML = `<div class="bubble user">${escapeHtml(displayText)}</div>`; // 使用者打的字一律當文字，不當 HTML
         content.appendChild(userBubble);
 
         // 更新狀態
@@ -394,7 +394,7 @@ function handleCommand(text) {
         state.userMessage = rest.trim();
         return handleCommand(rest);
     }
-    echo(`找不到指令「${text}」<br>${getMenuHtml()}`);
+    echo(`找不到指令「${escapeHtml(text)}」<br>${getMenuHtml()}`); // text 可能來自網址 ?q=，必須跳脫
     return true;
 }
 //-------------------------------------------------------------
@@ -637,7 +637,7 @@ function previewRow(label, html, className) {
     return `<div class="preview-row${className ? ' ' + className : ''}"><span class="preview-label">${label}</span>${html}</div>`;
 }
 //-------------------------------------------------------------
-// 預覽是把使用者輸入直接放進 innerHTML，必須先跳脫
+// 預覽、使用者氣泡、可複製區塊都是把使用者輸入放進 innerHTML，必須先跳脫
 function escapeHtml(text) {
     return String(text)
         .replace(/&/g, '&amp;')
@@ -808,7 +808,7 @@ function getCopyableHmtl(copyText) {
 	const tmpHtml = returnMsgStorage.rType.find(item => item.key === 'copyCodeBlock')?.value;
 	const renderedHTML = new Function('codeBlockId', 'copyText', `return \`${tmpHtml}\`;`)(
 		`code-block-${Date.now()}`
-		, copyText
+		, escapeHtml(copyText) // 顯示用：跳脫後 textContent 才會等於原字串，「複製」鈕拿到的才對
 	);
 	return renderedHTML;
 }

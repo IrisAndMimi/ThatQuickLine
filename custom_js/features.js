@@ -364,6 +364,22 @@ function getFormatDate(type, date) {
     return formattedDate;
 }
 //-------------------------------------------------------------
+// 四種內建格式「等同的自訂格式字串」(說明書的範例表由此自動生成)
+// 　用途：讓使用者在說明書點一下就複製，貼進自訂格式框當底稿再改。
+// 　注意：這是 getFormatDate() 同一份輸出的另一種寫法 ——
+// 　　　　改了上面 switch 的輸出，這裡的 pattern 要跟著改。
+const DATE_PRESET_PATTERNS = [
+    { value: '/',     label: '/ 格式',    pattern: '/ yyyy年M月d日 dddd' },
+    { value: '()',    label: '() 格式',   pattern: '(yyyy.M.d)' },
+    { value: '(pp)',  label: '人照',      pattern: 'yyyyMMdd(人照)' },
+    { value: '(by)m', label: 'by媽 格式', pattern: 'yyyyMMdd(by媽手機)' }
+];
+/* 測試範例（兩種寫法必須得到一樣的字）
+	DATE_PRESET_PATTERNS.every(p =>
+		formatDateByPattern(p.pattern, new Date(2026, 11, 31)) === getFormatDate(p.value, new Date(2026, 11, 31)));
+	// => true
+*/
+//-------------------------------------------------------------
 /**
  * 將日期字串轉換為 Date 物件，時間部分可省略
  * 支援格式：
@@ -502,12 +518,14 @@ registerFeature({
 				<tr><td><code>5 1231</code></td><td>自訂格式；若還沒給格式字串，會先回問你</td></tr>
 			</table>
 		</div>
+		<p class="help-desc">四種內建格式的輸出如下。<b>點右欄的格式即可直接複製</b>，
+			貼進「自訂格式」框，就能以它為底再改。</p>
 		<div class="help-example">
 			<div class="help-io">輸入 <code>1231</code>（假設今年為 2026）</div>
-			<div class="code-block">/ 格式    → / 2026年12月31日 星期四
-() 格式   → (2026.12.31)
-人照      → 20261231(人照)
-by媽 格式 → 20261231(by媽手機)</div>
+			<table class="help-table">
+				<tr><th>選項</th><th>結果</th><th>等同的自訂格式</th></tr>
+				${DATE_PRESET_PATTERNS.map(p => `<tr><td>${p.label}</td><td>${escapeHtml(getFormatDate(p.value, new Date(2026, 11, 31)))}</td><td class="token-cell" title="點一下複製這個格式" onclick="copyToClipboard(this.textContent)"><code>${escapeHtml(p.pattern)}</code></td></tr>`).join('')}
+			</table>
 		</div>
 
 		<p class="help-desc"><b>日期後面可以加「<code>.</code>時間」</b>，時間寫 2、4 或 6 位數：</p>

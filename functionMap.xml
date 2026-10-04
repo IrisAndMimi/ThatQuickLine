@@ -20,7 +20,7 @@
     core.js 與 index.html 都不需要修改。
   ================================================================================
 -->
-<functionMap app="那個 QuickLine" updated="2026-08-17">
+<functionMap app="那個 QuickLine" updated="2026-10-03">
 
 <file path="index.html" role="入口">
   <desc>
@@ -96,7 +96,7 @@
   <provides name="goBack">返回（x 與 Esc 共用）</provides>
   <provides name="BACK_COMMAND">返回指令的字母，目前是 x</provides>
   <provides name="previewRow">預覽的一列；第三參數可加 pending 樣式，用於「還沒打完」</provides>
-  <provides name="escapeHtml">預覽會把使用者輸入放進 innerHTML，需先跳脫</provides>
+  <provides name="escapeHtml">預覽、使用者氣泡、可複製區塊、「找不到指令」的回顯都會把使用者輸入放進 innerHTML，需先跳脫</provides>
   <provides name="autoGrowInput">輸入框高度隨行數自動調整（超過 CSS max-height 後改內部捲動）</provides>
   <provides name="resolveContent">buttons/help 支援字串或函式</provides>
   <provides name="updateTitle">依所在位置更新分頁標題（主選單→APP_NAME；功能內→功能 · APP_NAME）</provides>
@@ -137,6 +137,8 @@
 
     <uses file="custom_js/core.js" part="getCopyableHmtl" />
     <uses file="custom_js/core.js" part="debounce" />
+    <uses file="custom_js/core.js" part="copyToClipboard" />
+    <uses file="custom_js/core.js" part="escapeHtml" />
     <uses file="data/return_msg_storage.js" part="rType.copyCodeBlock" indirect="經由 getCopyableHmtl" />
 
     <ui>
@@ -176,6 +178,16 @@
       <example input="1231.11.22">超過一個「.」→ 「無法解析的日期格式」</example>
     </io>
 
+    <note>
+      說明書「輸入 1231」的範例表由 features.js 的 DATE_PRESET_PATTERNS 常數生成，三欄：
+      選項／結果（getFormatDate 實算，不是手寫）／等同的自訂格式。
+      右欄 td.token-cell 可點擊直接複製該格式字串
+      （onclick="copyToClipboard(this.textContent)"，讀格子裡的字，不把字串拼進 onclick），
+      貼進自訂格式框就能當底稿修改。只有右欄可點，選項欄與結果欄不綁事件。
+      DATE_PRESET_PATTERNS 是 getFormatDate() 同一份輸出的另一種寫法：
+      改了 getFormatDate 的輸出、或增減／改名單選鈕，這個陣列要跟著改。
+    </note>
+
     <subFunction name="自訂格式">
       <note>
         標記清單定義在 features.js 的 DATE_TOKENS 常數，
@@ -207,9 +219,9 @@
         <example input="yyyy'day'" option="1231">2026day</example>
         <example input="民國cyy年M月d日" option="1231">民國115年12月31日</example>
         <example input="日期：yyyy/MM/dd(換行)時間：HH:mm:ss" option="1231.115959">兩行輸出，換行保留</example>
-        <example input="（格式留空）">「請先在『自訂格式』欄位輸入格式」</example>
+        <example input="（格式留空）">回問「這個日期要用什麼格式？」，下一句輸入即為格式（待補參數機制）</example>
       </io>
-      <remove>刪 DATE_TOKENS / formatDateByPattern / resolveDateTime / updateCustomFormatPreview、getFormatDateHtmlC 的 custom 分支、buttons 的 custom 單選與預覽、說明書對應段落、本節點。
+      <remove>刪 DATE_TOKENS / DATE_PRESET_PATTERNS / formatDateByPattern / resolveDateTime / updateCustomFormatPreview、getFormatDateHtmlC 的 custom 分支、buttons 的 custom 單選與預覽、說明書對應段落（含「輸入 1231」範例表的「等同的自訂格式」欄）、本節點。
         注意 parseDateString 的「.時間」解析是獨立能力，其他格式也吃得到，不必一起刪</remove>
     </subFunction>
 
@@ -373,6 +385,40 @@
 <!-- 歷史紀錄：已修正的問題與已刪除的東西，供日後回顧                                  -->
 <!-- ================================================================================ -->
 <history>
+  <fix date="2026-10-03" title="複製日期說明書：內建格式可點一下複製成自訂格式字串；補上三處 HTML 跳脫">
+    一、新功能（features.js）：
+    說明書「輸入 1231」那個範例原本是一塊純文字（四行「選項 → 結果」），
+    改成三欄表格：選項／結果／等同的自訂格式。右欄可點擊直接複製
+    （沿用格式標記表的 td.token-cell 樣式與 copyToClipboard，沒有新增 CSS 或新函式），
+    讓人可以把選單上已有的格式複製下來，貼進自訂格式框當底稿再改。
+    資料來源是新常數 DATE_PRESET_PATTERNS（value／label／pattern）；結果欄用
+    getFormatDate() 實算，不再手寫。
+    測試：四種格式的 pattern 與 getFormatDate 逐日比對 2024~2027 共 1461 天完全一致；
+    value／label 與畫面上的單選鈕一致；貼進自訂格式框後的輸出與內建選項相同。
+
+    二、code review 找到的既有問題（core.js，三處各補一個 escapeHtml）：
+    使用者輸入未跳脫就放進 innerHTML ——
+      1. pushMessage() 的使用者氣泡
+      2. handleCommand() 主選單「找不到指令「…」」的回顯
+      3. getCopyableHmtl() 的可複製區塊
+    後果有兩個：
+      a. 搭配 ?q= 網址參數就是反射型 XSS：別人給的連結
+         （index.html?q=&lt;img src=x onerror=...&gt;）一點開就會在本頁執行指令碼。
+      b. 可複製區塊「顯示的字」跟「複製鈕拿到的字」不一樣：內容含 &lt; 或 &amp; 時
+         （例如重複文字含標籤、Line 群組名稱含 &amp;reg;），自動複製是對的，
+         但之後按「複製」鈕讀的是 textContent，拿到的是被 HTML 解析過的字。
+    修正後剪貼簿拿到的仍是原字串，只有「顯示」那份先跳脫。
+    測試：jsdom 驗證上述三種輸入不再產生節點、複製鈕與自動複製內容相同，
+    並重跑日期／剪貼簿／連結轉換／計算機的既有案例確認無回歸（共 41 項）。
+
+    三、文件補漏：
+      - 複製日期的 &lt;uses&gt; 漏列 copyToClipboard（格式標記表早就在用），本次連同 escapeHtml 補上。
+      - 自訂格式 &lt;io&gt; 的「格式留空」範例還寫著舊的錯誤訊息，實際早已改成回問，訂正。
+
+    四、死碼：逐一比對所有函式／常數的引用次數、styles.css 每個 class 與 id 的使用處，
+    沒有找到可刪的死碼，本次沒有刪除任何東西。
+  </fix>
+
   <fix date="2026-08-17" title="專案總體檢：複製日期「還沒打完」誤判，以及多處文件補漏">
     背景：使用者要求整理整個專案、確認 functionMap.xml／README.md 是否跟得上最新程式碼。
     逐一比對 features.js 實際登記的功能／選項代號、functionMap.xml 的 &lt;function&gt; 節點、
